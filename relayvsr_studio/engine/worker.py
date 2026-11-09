@@ -12,8 +12,6 @@ import sys
 import threading
 import traceback
 
-from . import __doc__ as _doc  # noqa: F401 - keeps package import explicit
-
 _write_lock = threading.Lock()
 
 

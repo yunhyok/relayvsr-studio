@@ -33,12 +33,20 @@ jobs:
           name: installer
           path: RelayVSR-Studio-Setup-*.exe
 
-      - name: Release
+      # Releases are published manually (gh release create) after the installer has been
+      # exercised on real hardware; attach the CI artifact only if it is missing.
+      - name: Attach to release if missing
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: RelayVSR-Studio-Setup-*.exe
-          generate_release_notes: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $assets = gh release view $tag --json assets --jq '.assets[].name' 2>$null
+          if ($LASTEXITCODE -ne 0) { Write-Host "no release for $tag; skipping"; exit 0 }
+          $file = Get-ChildItem RelayVSR-Studio-Setup-*.exe | Select-Object -First 1
+          if ($assets -contains $file.Name) { Write-Host "asset already attached"; exit 0 }
+          gh release upload $tag $file.FullName
 
   test:
     runs-on: ubuntu-latest
