@@ -7,7 +7,13 @@ try:
     import triton.language as tl
 except ImportError:  # pragma: no cover
     triton = None
-    tl = None
+
+    class _NoTritonLanguage:
+        """Stands in for ``triton.language`` so kernel signatures still evaluate; the kernels are never run."""
+
+        constexpr = None
+
+    tl = _NoTritonLanguage()
 
 
 def _jit(fn):

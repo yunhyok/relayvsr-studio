@@ -14,7 +14,13 @@ try:  # Triton is optional on Windows; backends.py decides whether this kernel i
     import triton.language as tl
 except ImportError:  # pragma: no cover - exercised only without Triton
     triton = None
-    tl = None
+
+    class _NoTritonLanguage:
+        """Stands in for ``triton.language`` so kernel signatures still evaluate; the kernels are never run."""
+
+        constexpr = None
+
+    tl = _NoTritonLanguage()
 
 
 @dataclass(frozen=True)
