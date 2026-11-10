@@ -12,9 +12,9 @@ build/
 dist/
 installer/output/
 installer/vendor/
-weights/
-models/
-outputs/
+/weights/
+/models/
+/outputs/
 *.safetensors
 *.pt
 *.pth
