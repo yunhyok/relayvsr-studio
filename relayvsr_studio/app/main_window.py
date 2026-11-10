@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
 from .. import APP_NAME, __version__
 from ..bootstrap import models as model_files
 from ..bootstrap.envmgr import EnvironmentManager, EnvStatus
-from ..paths import app_home, logs_dir
+from ..paths import app_home, clean_scratch, logs_dir, scratch_subdir
 from .i18n import tr
 from .settings import Settings
 from .setup_dialog import SetupDialog
@@ -105,6 +105,9 @@ class MainWindow(QMainWindow):
         self.encoders: dict | None = None
         self.pause_requested = False
         self._run_started = 0.0
+        self._restart_pending = False
+        self._preview_dirs: dict[str, Path] = {}
+        clean_scratch(settings.scratch_path())
         self.setWindowTitle(f"{APP_NAME} {__version__}")
         self.resize(1280, 860)
         self.setAcceptDrops(True)
@@ -470,7 +473,11 @@ class MainWindow(QMainWindow):
         else:
             self.statusBar().showMessage(tr("Engine not installed"))
             self.env_button.setText(tr("Environment") + " !")
-            if status.mode == "managed":
+            if status.mode == "managed" and status.torch and status.error is None and status.app_version != __version__:
+                # App upgraded: PyTorch and friends are already there, only the engine package is refreshed.
+                self.statusBar().showMessage(tr("Updating the engine package…"))
+                self.open_setup().install(app_only=True)
+            elif status.mode == "managed":
                 answer = QMessageBox.question(self, tr("Environment setup"), tr("The inference engine is not installed yet. Install it now? (downloads about 3.5 GB)"))
                 dialog = self.open_setup()
                 if answer == QMessageBox.StandardButton.Yes:
@@ -486,8 +493,18 @@ class MainWindow(QMainWindow):
         return dialog
 
     def _environment_changed(self) -> None:
+        if self.current is not None:
+            # Never kill a running job: the engine restarts with the new settings once it finishes.
+            self._restart_pending = True
+            self.append_log(tr("The new folders take effect after the current job."))
+            return
         self.client.stop()
         self.check_environment()
+
+    def _preview_dir(self, job: Job) -> Path:
+        root = scratch_subdir("previews", self.settings.scratch_path()) or app_home() / "previews"
+        self._preview_dirs[job.id] = root / job.id
+        return self._preview_dirs[job.id]
 
     def refresh_model_status(self) -> None:
         scale = int(self.scale_combo.currentData())
@@ -643,7 +660,8 @@ class MainWindow(QMainWindow):
             "use_external_ffmpeg": self.external_ffmpeg_check.isChecked(),
             "ffmpeg_path": self.ffmpeg_edit.text().strip() or None,
             "preview_every": 24 if self.preview_check.isChecked() else 0,
-            "preview_dir": str(app_home() / "previews" / job.id) if self.preview_check.isChecked() else None,
+            "preview_dir": str(self._preview_dir(job)) if self.preview_check.isChecked() else None,
+            "scratch_dir": self.settings.scratch_dir.strip() or None,
             "output_format": "video",
         }
         if vram == "quality":
@@ -864,10 +882,14 @@ class MainWindow(QMainWindow):
         self._update_item(job)
         self.current = None
         self._cleanup_previews(job)
+        if self._restart_pending:
+            self._restart_pending = False
+            self.client.stop()
+            self.check_environment()
         QTimer.singleShot(50, self.run_next)
 
     def _cleanup_previews(self, job: Job) -> None:
-        folder = app_home() / "previews" / job.id
+        folder = self._preview_dirs.pop(job.id, app_home() / "previews" / job.id)
         if folder.exists():
             shutil.rmtree(folder, ignore_errors=True)
 

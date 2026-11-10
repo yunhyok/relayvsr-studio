@@ -79,6 +79,7 @@ class JobConfig:
     # Reporting
     preview_every: int = 0
     preview_dir: str | None = None
+    scratch_dir: str | None = None  # in-progress encode files go to <scratch_dir>/RelayVSR-scratch/encode
     progress_interval: float = 0.25
 
     @classmethod
@@ -307,7 +308,7 @@ class Engine:
             elif cfg.output_format == "png":
                 writer = media.ImageSequenceWriter(output_path)
             else:
-                temp_path = media.temporary_path(output_path)
+                temp_path = media.temporary_path(output_path, cfg.scratch_dir)
                 use_ffmpeg = cfg.use_external_ffmpeg or (cfg.codec.endswith("_nvenc") and not media.pyav_encoder_available(cfg.codec))
                 if use_ffmpeg and media.find_ffmpeg(cfg.ffmpeg_path):
                     audio_src = cfg.input if (cfg.copy_audio and info_media.has_audio and not cfg.max_frames and not cfg.start_frame) else None
@@ -373,18 +374,18 @@ class Engine:
             if temp_path is not None:
                 if external_audio_inline:
                     wrote_audio = True
-                    os.replace(temp_path, output_path)
+                    media.move_into_place(temp_path, output_path)
                 elif cfg.copy_audio and info_media.has_audio:
                     emit({"type": "stage", "stage": "mux", "message": "Copying audio"})
                     max_duration = frames_done / float(fps) if (cfg.max_frames or cfg.start_frame) else None
                     if cfg.start_frame:
                         max_duration = None  # audio offset would be wrong; skip audio for trimmed starts
                         wrote_audio = False
-                        os.replace(temp_path, output_path)
+                        media.move_into_place(temp_path, output_path)
                     else:
                         wrote_audio = media.mux_audio(cfg.input, temp_path, output_path, ffmpeg_path=cfg.ffmpeg_path, max_duration=max_duration)
                 else:
-                    os.replace(temp_path, output_path)
+                    media.move_into_place(temp_path, output_path)
                 temp_path = None
         finally:
             try:

@@ -96,6 +96,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "Model files for this scale are not downloaded yet. Download them now?": "이 배율의 모델 파일이 아직 없습니다. 지금 다운로드할까요?",
         "Install the engine first (Environment).": "먼저 엔진을 설치하세요 (환경 메뉴).",
         "Free disk space": "여유 디스크 공간",
+        "Scratch disk": "스크래치 디스크",
+        "Updating the engine package…": "엔진 패키지를 새 버전으로 갱신하는 중…",
+        "Scratch folder": "스크래치 폴더",
+        "Not set: temporary files stay next to the output file": "미지정: 임시 파일을 출력 파일과 같은 폴더에 만듭니다",
+        "Videos being encoded, preview images, temporary files, the Triton kernel cache and the engine "
+        "download cache are written to a RelayVSR-scratch subfolder here. Finished videos are then moved "
+        "to the output folder. Pick a fast drive with free space of at least the size of the output video.": (
+            "인코딩 중인 동영상, 미리보기 이미지, 임시 파일, Triton 커널 캐시, 엔진 다운로드 캐시를 이 폴더 아래 "
+            "RelayVSR-scratch 하위 폴더에 기록합니다. 완성된 동영상은 출력 폴더로 옮겨집니다. "
+            "출력 동영상 크기 이상의 여유 공간이 있는 빠른 드라이브를 지정하세요."
+        ),
+        "This folder cannot be used as a scratch folder.": "이 폴더는 스크래치 폴더로 사용할 수 없습니다.",
+        "The new folders take effect after the current job.": "변경한 폴더는 현재 작업이 끝난 뒤 적용됩니다.",
         "About": "정보",
         "Quality first (BF16 if it fits)": "품질 우선 (가능하면 BF16)",
         "Low VRAM": "저용량 VRAM",

@@ -59,4 +59,4 @@ jobs:
         run: |
           pip install pytest numpy pillow "av>=17,<19" torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
           pip install einops safetensors accelerate "diffusers==0.37.1"
-          pytest -q tests -k "not gpu"
+          python -m pytest -q tests -k "not gpu"

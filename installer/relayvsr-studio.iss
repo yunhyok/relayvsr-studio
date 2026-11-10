@@ -1,8 +1,8 @@
 ; Inno Setup script for RelayVSR Studio.
-; Build with: ISCC.exe /DAppVersion=0.1.0 /DBuildDir=<build dir> relayvsr-studio.iss
+; Build with: ISCC.exe /DAppVersion=0.2.0 /DBuildDir=<build dir> relayvsr-studio.iss
 
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.2.0"
 #endif
 #ifndef BuildDir
   #define BuildDir "..\build"

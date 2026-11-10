@@ -36,13 +36,14 @@ class _InstallThread(QThread):
     finished_status = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, envmgr: EnvironmentManager, parent=None):
+    def __init__(self, envmgr: EnvironmentManager, parent=None, app_only: bool = False):
         super().__init__(parent)
         self.envmgr = envmgr
+        self.app_only = app_only
 
     def run(self) -> None:
         try:
-            status = self.envmgr.create(self.progress.emit)
+            status = self.envmgr.create(self.progress.emit, reinstall_app_only=self.app_only)
             self.finished_status.emit(status)
         except InterruptedError:
             self.failed.emit("cancelled")
@@ -124,7 +125,7 @@ class SetupDialog(QDialog):
         form.addRow(tr("Free disk space"), self.disk_label)
         buttons = QHBoxLayout()
         self.install_button = QPushButton(tr("Install / repair engine"))
-        self.install_button.clicked.connect(self.install)
+        self.install_button.clicked.connect(lambda: self.install())
         buttons.addWidget(self.install_button)
         self.cancel_install_button = QPushButton(tr("Cancel"))
         self.cancel_install_button.setEnabled(False)
@@ -164,6 +165,33 @@ class SetupDialog(QDialog):
             self.model_rows[scale] = {"status": status, "bar": bar, "button": button}
         layout.addWidget(models_box)
 
+        scratch_box = QGroupBox(tr("Scratch disk"))
+        scratch_form = QFormLayout(scratch_box)
+        self.scratch_dir_edit = QLineEdit(self.settings.scratch_dir)
+        self.scratch_dir_edit.setPlaceholderText(tr("Not set: temporary files stay next to the output file"))
+        self.scratch_dir_edit.setClearButtonEnabled(True)
+        self.scratch_dir_edit.textChanged.connect(self._show_scratch_space)
+        scratch_row = QHBoxLayout()
+        scratch_row.addWidget(self.scratch_dir_edit)
+        browse_scratch = QPushButton(tr("Browse…"))
+        browse_scratch.clicked.connect(lambda: self._browse(self.scratch_dir_edit, title=tr("Scratch folder")))
+        scratch_row.addWidget(browse_scratch)
+        scratch_form.addRow(tr("Scratch folder"), scratch_row)
+        self.scratch_space_label = QLabel("")
+        scratch_form.addRow(tr("Free disk space"), self.scratch_space_label)
+        scratch_hint = QLabel(
+            tr(
+                "Videos being encoded, preview images, temporary files, the Triton kernel cache and the engine "
+                "download cache are written to a RelayVSR-scratch subfolder here. Finished videos are then moved "
+                "to the output folder. Pick a fast drive with free space of at least the size of the output video."
+            )
+        )
+        scratch_hint.setWordWrap(True)
+        scratch_hint.setStyleSheet("color:#999")
+        scratch_form.addRow(scratch_hint)
+        layout.addWidget(scratch_box)
+        self._show_scratch_space()
+
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(5000)
@@ -180,10 +208,23 @@ class SetupDialog(QDialog):
         bottom.addWidget(close_button)
         layout.addLayout(bottom)
 
-    def _browse(self, edit: QLineEdit, models: bool = False) -> None:
-        folder = QFileDialog.getExistingDirectory(self, tr("Models folder") if models else tr("Engine folder"), edit.text() or str(Path.home()))
+    def _browse(self, edit: QLineEdit, models: bool = False, title: str | None = None) -> None:
+        folder = QFileDialog.getExistingDirectory(self, title or (tr("Models folder") if models else tr("Engine folder")), edit.text() or str(Path.home()))
         if folder:
             edit.setText(folder)
+
+    def _show_scratch_space(self) -> None:
+        text = self.scratch_dir_edit.text().strip()
+        if not text:
+            self.scratch_space_label.setText("—")
+            return
+        try:
+            anchor = Path(text).anchor
+            if not anchor:
+                raise OSError("relative path")
+            self.scratch_space_label.setText(f"{_gb(shutil.disk_usage(anchor).free)} ({anchor})")
+        except OSError:
+            self.scratch_space_label.setText("?")
 
     def append_log(self, text: str) -> None:
         self.log.appendPlainText(text)
@@ -198,6 +239,26 @@ class SetupDialog(QDialog):
             self.settings.env_dir = self.env_dir_edit.text().strip()
             self.envmgr.env_dir = Path(self.settings.env_dir)
             changed = True
+        scratch = self.scratch_dir_edit.text().strip()
+        if self.settings.scratch_dir != scratch:
+            if scratch:
+                try:
+                    if not Path(scratch).is_absolute():
+                        raise OSError("not an absolute path")
+                    probe = Path(scratch) / "RelayVSR-scratch"
+                    probe.mkdir(parents=True, exist_ok=True)
+                    test_file = probe / ".write-test"
+                    test_file.write_bytes(b"")
+                    test_file.unlink()
+                except OSError as error:
+                    QMessageBox.warning(self, tr("Scratch disk"), f"{tr('This folder cannot be used as a scratch folder.')}\n{scratch}\n{error}")
+                    self.scratch_dir_edit.setText(self.settings.scratch_dir)
+                    scratch = self.settings.scratch_dir
+            if self.settings.scratch_dir != scratch:
+                self.settings.scratch_dir = scratch
+                self.envmgr.scratch_dir = Path(scratch) if scratch else None
+                self.append_log(f"{tr('Scratch folder')}: {scratch or '—'}")
+                changed = True
         if changed:
             self.settings.save()
             self.refresh_status()
@@ -248,14 +309,15 @@ class SetupDialog(QDialog):
                 row["button"].setEnabled(scale not in self._download_threads)
 
     # ------------------------------------------------------------- install
-    def install(self) -> None:
+    def install(self, app_only: bool = False) -> None:
+        """Install or repair the engine; ``app_only`` just refreshes the app's own engine package."""
         self.apply_paths()
         if self._install_thread is not None:
             return
         self.install_button.setEnabled(False)
         self.cancel_install_button.setEnabled(True)
         self.append_log("=== engine install ===")
-        self._install_thread = _InstallThread(self.envmgr, self)
+        self._install_thread = _InstallThread(self.envmgr, self, app_only=bool(app_only))
         self._install_thread.progress.connect(self._install_progress)
         self._install_thread.finished_status.connect(self._install_done)
         self._install_thread.failed.connect(self._install_failed)

@@ -14,6 +14,7 @@ class Settings:
     language: str = "auto"
     models_dir: str = str(default_models_dir())
     env_dir: str = str(default_env_dir())
+    scratch_dir: str = ""  # "" -> temp files next to the output, caches in the default locations
     output_dir: str = ""  # "" -> same folder as the input
     scale: int = 4
     size_mode: str = "native"  # native | fit1080 | fit1440 | fit2160 | width
@@ -59,6 +60,9 @@ class Settings:
 
     def env_path(self) -> Path:
         return Path(self.env_dir) if self.env_dir else default_env_dir()
+
+    def scratch_path(self) -> Path | None:
+        return Path(self.scratch_dir) if self.scratch_dir.strip() else None
 
 
 __all__ = ["Settings"]

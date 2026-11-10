@@ -59,6 +59,25 @@ RelayVSR Studio wraps the official inference code in a Windows application and a
 
 The app never bundles the model weights; they are downloaded from Hugging Face on demand.
 
+### Scratch disk
+
+By default the video being encoded is written next to the output file, and caches go to the
+user profile on the system drive. **Environment → Scratch disk** lets you pick another folder
+(for example on a fast SSD with free space). The app then writes everything temporary to
+`<folder>\RelayVSR-scratch`:
+
+| Subfolder | Content |
+|---|---|
+| `encode` | the video while it is being encoded; moved to the output folder when finished |
+| `previews` | before/after preview images of the running job |
+| `tmp` | `TEMP`/`TMP` of the engine process |
+| `triton-cache` | compiled Triton kernels (otherwise `%USERPROFILE%\.triton`) |
+| `uv-cache` | package download cache while the engine is installed (deleted afterwards) |
+
+Keep free space of at least the size of the output video on that drive. Leftovers older than a
+day are removed at startup. Leave the field empty to return to the default behaviour. On the
+command line use `--scratch-dir <folder>` or the `RELAYVSR_SCRATCH` environment variable.
+
 ## Which model / settings?
 
 | Input | Target | Model | Typical on RTX 5070 Ti (16 GB) |
@@ -166,6 +185,12 @@ Yao, Haoran Li and Zhibo Chen; the SDPA fallback follows LightX2V. See
 2. 앱을 처음 실행하면 추론 엔진(PyTorch CUDA 12.8 등 약 3.5 GB)을 `%LOCALAPPDATA%\RelayVSRStudio\env`에 설치할지 묻습니다.
 3. **환경** 창에서 4배/2배 모델(각 약 10 GB)을 내려받습니다. 폴더는 다른 드라이브로 바꿀 수 있습니다.
 4. 동영상을 대기열에 끌어다 놓고 모델과 출력 크기를 고른 뒤 **시작**을 누릅니다.
+
+**스크래치 디스크**: **환경** 창의 *스크래치 디스크*에서 폴더를 지정하면 인코딩 중인 동영상,
+미리보기 이미지, 임시 파일, Triton 커널 캐시, 엔진 설치용 다운로드 캐시를 모두
+`<폴더>\RelayVSR-scratch` 아래에 기록합니다. 완성된 동영상은 출력 폴더로 옮겨집니다. 시스템
+드라이브 여유 공간이 부족할 때 다른 드라이브를 지정하세요. 비워 두면 기존 방식(출력 파일 옆,
+사용자 프로필)으로 동작합니다. 명령줄에서는 `--scratch-dir` 또는 환경 변수 `RELAYVSR_SCRATCH`를 씁니다.
 
 권장: 480p→1080p/4K는 4배 모델, 720p→1440p와 1080p→4K는 2배 모델. VRAM 전략은 **자동**이
 가장 안전하며, 고급 옵션에서 FP8/BF16, 타일링, 오프로드, Triton/SDPA, 키프레임 간격 등을 바꿀 수 있습니다.

@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .. import __version__
-from ..paths import app_home, bundle_dir, default_env_dir, is_frozen
+from ..paths import app_home, bundle_dir, default_env_dir, is_frozen, scratch_environment, scratch_subdir
 
 Progress = Callable[[dict], None]
 
@@ -88,13 +88,18 @@ print(json.dumps(out))
 
 
 class EnvironmentManager:
-    def __init__(self, env_dir: Path | None = None):
+    def __init__(self, env_dir: Path | None = None, scratch_dir: Path | None = None):
         self.env_dir = Path(env_dir) if env_dir else default_env_dir()
+        self.scratch_dir = Path(scratch_dir) if scratch_dir else None
         self.home = app_home()
         self.tools_dir = self.home / "tools"
-        self.cache_dir = self.home / "cache"
         self._process: subprocess.Popen | None = None
         self._cancel = threading.Event()
+
+    @property
+    def cache_dir(self) -> Path:
+        """Package download cache used while installing the engine (deleted afterwards)."""
+        return scratch_subdir("uv-cache", self.scratch_dir) or self.home / "cache"
 
     # ------------------------------------------------------------ discovery
     @staticmethod
@@ -125,6 +130,8 @@ class EnvironmentManager:
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
         env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+        if self.scratch_dir:
+            env.update(scratch_environment(self.scratch_dir))
         root = self.source_root()
         if root is not None:
             env["PYTHONPATH"] = str(root) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
@@ -244,6 +251,8 @@ class EnvironmentManager:
             return self.status()
         uv = self.uv_executable(progress=progress)
         env = dict(os.environ)
+        if self.scratch_dir:
+            env.update(scratch_environment(self.scratch_dir))
         env["UV_CACHE_DIR"] = str(self.cache_dir)
         env["UV_PYTHON_INSTALL_DIR"] = str(self.home / "python")
         env["UV_LINK_MODE"] = "copy"

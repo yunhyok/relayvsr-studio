@@ -488,12 +488,42 @@ def _mux_with_pyav(source: Path, video: Path, destination: Path, max_duration: f
     video.unlink(missing_ok=True)
 
 
-def temporary_path(destination: str | Path) -> Path:
+def temporary_path(destination: str | Path, scratch_dir: str | Path | None = None) -> Path:
+    """In-progress encode file: in the scratch folder when one is set, else next to the destination."""
+    from ..paths import scratch_subdir
+
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    folder = scratch_subdir("encode", scratch_dir)
+    if folder is not None:
+        try:
+            handle = tempfile.NamedTemporaryFile(prefix=".relayvsr-", suffix=destination.suffix or ".mp4", dir=folder, delete=False)
+            handle.close()
+            return Path(handle.name)
+        except OSError:
+            pass
     handle = tempfile.NamedTemporaryFile(prefix=".relayvsr-", suffix=destination.suffix or ".mp4", dir=destination.parent, delete=False)
     handle.close()
     return Path(handle.name)
+
+
+def move_into_place(source: str | Path, destination: str | Path) -> None:
+    """Rename ``source`` to ``destination``; across drives copy to a ``.part`` file first, then rename."""
+    source, destination = Path(source), Path(destination)
+    try:
+        os.replace(source, destination)
+        return
+    except OSError:
+        if not source.exists():
+            raise
+    part = destination.with_name(f".{destination.name}.part")
+    try:
+        shutil.copyfile(source, part)
+        os.replace(part, destination)
+    except BaseException:
+        part.unlink(missing_ok=True)
+        raise
+    source.unlink(missing_ok=True)
 
 
 def save_image(rgb: torch.Tensor, path: str | Path) -> None:
@@ -512,6 +542,7 @@ __all__ = [
     "find_ffmpeg",
     "is_image_input",
     "iter_frames",
+    "move_into_place",
     "mux_audio",
     "probe",
     "pyav_encoder_available",

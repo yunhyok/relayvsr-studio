@@ -5,12 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 from pathlib import Path
 
 from . import __version__
-from .paths import default_models_dir
+from .paths import SCRATCH_ENV, default_models_dir, scratch_environment
 
 
 def _add_job_arguments(parser: argparse.ArgumentParser) -> None:
@@ -47,9 +48,12 @@ def _add_job_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--start-frame", type=int, default=0)
     parser.add_argument("--max-frames", type=int)
     parser.add_argument("--fps", help="Override FPS; required for image directories")
+    parser.add_argument("--scratch-dir", default=os.environ.get(SCRATCH_ENV), help="Scratch folder for in-progress encodes, temp files and the Triton cache")
 
 
 def cmd_upscale(args: argparse.Namespace) -> int:
+    if args.scratch_dir:
+        os.environ.update(scratch_environment(args.scratch_dir))  # before torch / triton are imported
     from .engine.pipeline import Engine, JobCancelled, JobConfig
 
     data = {k: v for k, v in vars(args).items() if k not in ("command", "func", "verbose")}

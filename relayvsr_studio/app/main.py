@@ -89,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
 
     settings = Settings.load()
     set_language(settings.language)
-    envmgr = EnvironmentManager(settings.env_path())
+    envmgr = EnvironmentManager(settings.env_path(), settings.scratch_path())
     window = MainWindow(settings, envmgr)
     window.show()
     code = app.exec()
