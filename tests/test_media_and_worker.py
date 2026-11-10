@@ -53,6 +53,9 @@ def test_pyav_writer_roundtrip(tiny_video, tmp_path):
 
 
 def test_worker_probe_roundtrip():
+    import torch
+
+    has_cuda = torch.cuda.is_available()
     env = dict(os.environ, PYTHONPATH=os.getcwd(), PYTHONDONTWRITEBYTECODE="1")
     process = subprocess.Popen([sys.executable, "-X", "utf8", "-m", "relayvsr_studio.engine.worker"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env, encoding="utf-8")
     try:
@@ -66,10 +69,13 @@ def test_worker_probe_roundtrip():
             obj = json.loads(line)
             seen.append(obj["type"])
             if obj["type"] in ("probe", "error"):
-                assert obj["type"] == "probe", obj
-                assert "gpu" in obj and "encoders" in obj
+                if has_cuda:
+                    assert obj["type"] == "probe", obj
+                    assert "gpu" in obj and "encoders" in obj
+                else:  # CPU-only machine: the worker must answer with a clear error, not crash
+                    assert obj["type"] == "error" and obj["id"] == 1 and "No CUDA GPU" in obj["message"], obj
                 break
-        assert "hello" in seen and "probe" in seen
+        assert "hello" in seen and ("probe" if has_cuda else "error") in seen
         process.stdin.write(json.dumps({"cmd": "shutdown"}) + "\n")
         process.stdin.flush()
         process.wait(timeout=30)
