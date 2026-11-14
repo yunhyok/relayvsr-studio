@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
@@ -65,4 +66,25 @@ class Settings:
         return Path(self.scratch_dir) if self.scratch_dir.strip() else None
 
 
-__all__ = ["Settings"]
+def queue_file() -> Path:
+    return settings_file().with_name("queue.json")
+
+
+def load_queue() -> list[str]:
+    """Input paths that were still waiting when the app last ran."""
+    try:
+        data = json.loads(queue_file().read_text(encoding="utf-8"))
+        return [item for item in data if isinstance(item, str)]
+    except (OSError, ValueError, TypeError):
+        return []
+
+
+def save_queue(paths: list[str]) -> None:
+    path = queue_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_suffix(".tmp")
+    temp.write_text(json.dumps(paths, indent=2, ensure_ascii=False), encoding="utf-8")
+    os.replace(temp, path)  # never leave a half-written list behind
+
+
+__all__ = ["Settings", "load_queue", "queue_file", "save_queue"]

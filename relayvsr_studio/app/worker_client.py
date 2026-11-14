@@ -94,6 +94,10 @@ class WorkerClient(QObject):
     def plan(self, job: dict) -> int:
         return self.send({"cmd": "plan", "job": job})
 
+    def pause(self, paused: bool) -> None:
+        if self.is_running():
+            self.send({"cmd": "pause" if paused else "resume"})
+
     def cancel(self) -> None:
         if self.is_running():
             self.send({"cmd": "cancel"})

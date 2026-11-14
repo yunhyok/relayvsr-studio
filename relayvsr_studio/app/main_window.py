@@ -45,7 +45,7 @@ from ..bootstrap import models as model_files
 from ..bootstrap.envmgr import EnvironmentManager, EnvStatus
 from ..paths import app_home, clean_scratch, logs_dir, scratch_subdir
 from .i18n import tr
-from .settings import Settings
+from .settings import Settings, load_queue, save_queue
 from .setup_dialog import SetupDialog
 from .worker_client import WorkerClient
 
@@ -114,6 +114,8 @@ class MainWindow(QMainWindow):
         self._build_menu()
         self._build_ui()
         self._load_settings_into_ui()
+        for path in load_queue():  # restored as waiting; nothing starts by itself
+            self._add_job(Path(path))
         self.statusBar().showMessage(tr("Checking environment…"))
         QTimer.singleShot(200, self.check_environment)
 
@@ -370,6 +372,11 @@ class MainWindow(QMainWindow):
         self.cancel_button.setEnabled(False)
         self.cancel_button.clicked.connect(self.cancel_current)
         controls.addWidget(self.cancel_button)
+        self.pause_button = QPushButton(tr("Pause"))
+        self.pause_button.setCheckable(True)
+        self.pause_button.setEnabled(False)
+        self.pause_button.clicked.connect(self.toggle_pause)
+        controls.addWidget(self.pause_button)
         self.pause_check = QCheckBox(tr("Pause after current"))
         controls.addWidget(self.pause_check)
         controls.addStretch(1)
@@ -532,6 +539,14 @@ class MainWindow(QMainWindow):
         if added:
             self.settings.last_input_dir = str(Path(paths[0]).parent)
             self.settings.save()
+            self._save_queue()
+
+    def _save_queue(self) -> None:
+        """Remember unfinished jobs so the list survives a restart (or a crash mid-job)."""
+        try:
+            save_queue([str(j.input) for j in self.jobs if j.status in ("waiting", "running")])
+        except OSError as error:
+            log.warning("Could not save the queue: %s", error)
 
     def _add_job(self, path: Path) -> None:
         if any(j.input == path and j.status in ("waiting", "running") for j in self.jobs):
@@ -585,6 +600,7 @@ class MainWindow(QMainWindow):
                 continue
             self.jobs = [j for j in self.jobs if j.id != job_id]
             self.queue.takeItem(self.queue.row(item))
+        self._save_queue()
 
     def clear_finished(self) -> None:
         for job in [j for j in self.jobs if j.status in ("done", "failed", "cancelled")]:
@@ -727,6 +743,7 @@ class MainWindow(QMainWindow):
         self._update_item(job)
         self.start_button.setEnabled(False)
         self.cancel_button.setEnabled(True)
+        self._reset_pause(enabled=True)
         self.progress.setValue(0)
         self.progress_label.setText(f"{job.input.name} — {tr('Loading models…')}")
         self.preview_in.setPixmap(QPixmap())
@@ -738,6 +755,20 @@ class MainWindow(QMainWindow):
         self.append_log(f"config: {cfg}")
         self.client._busy_after_cancel = True
         job.command_id = self.client.upscale(cfg)
+
+    def toggle_pause(self, paused: bool) -> None:
+        if self.current is None:
+            self._reset_pause()
+            return
+        self.client.pause(paused)
+        self.pause_button.setText(tr("Resume") if paused else tr("Pause"))
+        if paused:
+            self.progress_label.setText(f"{self.current.input.name} — {tr('Pausing…')}")
+
+    def _reset_pause(self, enabled: bool = False) -> None:
+        self.pause_button.setChecked(False)
+        self.pause_button.setText(tr("Pause"))
+        self.pause_button.setEnabled(enabled)
 
     def cancel_current(self) -> None:
         if self.current is not None:
@@ -753,6 +784,8 @@ class MainWindow(QMainWindow):
             self.current = None
             self.start_button.setEnabled(True)
             self.cancel_button.setEnabled(False)
+            self._reset_pause()
+            self._save_queue()
             self.progress_label.setText(job.error)
 
     # -------------------------------------------------------------- events
@@ -825,6 +858,9 @@ class MainWindow(QMainWindow):
             self.progress_label.setText(f"{job.input.name} — {event.get('message', '')}")
         elif stage == "mux":
             self.progress_label.setText(f"{job.input.name} — {event.get('message', '')}")
+        elif stage in ("paused", "resumed"):
+            job.message = tr("Paused") if stage == "paused" else ""
+            self.progress_label.setText(f"{job.input.name} — {tr('Paused') if stage == 'paused' else tr('Running')}")
         self._update_item(job)
 
     def _on_progress(self, event: dict) -> None:
@@ -881,6 +917,8 @@ class MainWindow(QMainWindow):
             self.append_log(f"failed: {job.error}\n{event.get('traceback', '')}")
         self._update_item(job)
         self.current = None
+        self._reset_pause()
+        self._save_queue()
         self._cleanup_previews(job)
         if self._restart_pending:
             self._restart_pending = False

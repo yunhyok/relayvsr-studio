@@ -1,6 +1,6 @@
 """JSON-lines worker process used by the GUI.
 
-stdin  <- one JSON object per line: {"cmd": "probe" | "upscale" | "cancel" | "unload" | "shutdown", ...}
+stdin  <- one JSON object per line: {"cmd": "probe" | "upscale" | "pause" | "resume" | "cancel" | "unload" | "shutdown", ...}
 stdout -> one JSON object per line: {"type": ..., ...}; every reply to a command carries its "id".
 """
 
@@ -42,6 +42,7 @@ def main(argv: list[str] | None = None) -> int:
 
     engine = Engine()
     cancel_flag = threading.Event()
+    pause_flag = threading.Event()
     busy = threading.Lock()
 
     def handle(command: dict) -> None:
@@ -80,9 +81,10 @@ def main(argv: list[str] | None = None) -> int:
         elif cmd == "upscale":
             cfg = JobConfig.from_dict(command["job"])
             cancel_flag.clear()
+            pause_flag.clear()
             with busy:
                 try:
-                    result = engine.run(cfg, lambda e: emit({**e, "id": cid}), cancel_flag.is_set)
+                    result = engine.run(cfg, lambda e: emit({**e, "id": cid}), cancel_flag.is_set, pause_flag.is_set)
                     emit({"type": "finished", "id": cid, "ok": True, "result": result.to_dict()})
                 except JobCancelled:
                     emit({"type": "finished", "id": cid, "ok": False, "cancelled": True})
@@ -107,7 +109,10 @@ def main(argv: list[str] | None = None) -> int:
                 emit({"type": "error", "message": f"Bad JSON: {error}"})
                 continue
             cmd = command.get("cmd")
-            if cmd == "cancel":
+            if cmd in ("pause", "resume"):
+                pause_flag.set() if cmd == "pause" else pause_flag.clear()
+                emit({"type": "paused" if cmd == "pause" else "resumed", "id": command.get("id")})
+            elif cmd == "cancel":
                 cancel_flag.set()
                 emit({"type": "cancelling", "id": command.get("id")})
             elif cmd == "shutdown":

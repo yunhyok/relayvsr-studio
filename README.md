@@ -57,6 +57,11 @@ RelayVSR Studio wraps the official inference code in a Windows application and a
    Downloads resume if interrupted; folders can be moved to another drive from the same dialog.
 4. Drop videos onto the queue, pick the model and output size, press **Start**.
 
+The queue is remembered: files that are still waiting (or were being processed) when the app
+closes are listed again at the next start. Remove them from the list to forget them. **Pause**
+halts the running job at the next frame and **Resume** continues it; the models stay loaded, so
+VRAM remains in use while paused.
+
 The app never bundles the model weights; they are downloaded from Hugging Face on demand.
 
 ### Scratch disk
@@ -185,6 +190,10 @@ Yao, Haoran Li and Zhibo Chen; the SDPA fallback follows LightX2V. See
 2. 앱을 처음 실행하면 추론 엔진(PyTorch CUDA 12.8 등 약 3.5 GB)을 `%LOCALAPPDATA%\RelayVSRStudio\env`에 설치할지 묻습니다.
 3. **환경** 창에서 4배/2배 모델(각 약 10 GB)을 내려받습니다. 폴더는 다른 드라이브로 바꿀 수 있습니다.
 4. 동영상을 대기열에 끌어다 놓고 모델과 출력 크기를 고른 뒤 **시작**을 누릅니다.
+
+**대기 목록 기억**: 앱을 닫을 때 아직 대기 중이거나 처리 중이던 파일은 다음 실행 때 목록에 다시
+나타납니다. 목록에서 제거하면 기억에서도 지워집니다. **일시 정지**는 실행 중인 작업을 다음 프레임에서
+멈추고 **계속**으로 이어서 진행합니다. 정지 중에도 모델은 메모리에 남아 VRAM을 계속 사용합니다.
 
 **스크래치 디스크**: **환경** 창의 *스크래치 디스크*에서 폴더를 지정하면 인코딩 중인 동영상,
 미리보기 이미지, 임시 파일, Triton 커널 캐시, 엔진 설치용 다운로드 캐시를 모두

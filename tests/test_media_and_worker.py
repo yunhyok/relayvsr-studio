@@ -76,6 +76,10 @@ def test_worker_probe_roundtrip():
                     assert obj["type"] == "error" and obj["id"] == 1 and "No CUDA GPU" in obj["message"], obj
                 break
         assert "hello" in seen and ("probe" if has_cuda else "error") in seen
+        for cmd, reply in (("pause", "paused"), ("resume", "resumed")):
+            process.stdin.write(json.dumps({"cmd": cmd, "id": 2}) + "\n")
+            process.stdin.flush()
+            assert json.loads(process.stdout.readline())["type"] == reply
         process.stdin.write(json.dumps({"cmd": "shutdown"}) + "\n")
         process.stdin.flush()
         process.wait(timeout=30)

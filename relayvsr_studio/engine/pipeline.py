@@ -195,8 +195,9 @@ class Engine:
 
     # ------------------------------------------------------------------ run
     @torch.no_grad()
-    def run(self, cfg: JobConfig, emit: EventCallback, cancelled: CancelCheck | None = None) -> JobResult:
+    def run(self, cfg: JobConfig, emit: EventCallback, cancelled: CancelCheck | None = None, paused: CancelCheck | None = None) -> JobResult:
         cancelled = cancelled or (lambda: False)
+        paused = paused or (lambda: False)
         started = time.perf_counter()
         info_media = media.probe(cfg.input, cfg.fps)
         if info_media.kind != "image" and info_media.fps is None:
@@ -322,6 +323,13 @@ class Engine:
                     writer = media.PyAVVideoWriter(temp_path, fps, encode)
 
             for result in stream.frames(packets):
+                if paused() and not cancelled():
+                    emit({"type": "stage", "stage": "paused"})
+                    pause_started = time.perf_counter()
+                    while paused() and not cancelled():
+                        time.sleep(0.1)
+                    run_started += time.perf_counter() - pause_started  # keep fps / ETA honest
+                    emit({"type": "stage", "stage": "resumed"})
                 if cancelled():
                     raise JobCancelled("Cancelled by user.")
                 rgb = result.rgb
