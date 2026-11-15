@@ -17,7 +17,7 @@ import torch.nn.functional as F
 from . import backends, media
 from .checkpoints import DTYPES, LoadOptions, LoadedModels, find_checkpoints, load_models
 from .geometry import RelayGeometry
-from .gpu import MemoryPlan, apply_runtime_tuning, gpu_info, plan_memory
+from .gpu import MemoryPlan, apply_runtime_tuning, gpu_info, held_bytes, plan_memory, query_memory, release_vram, restore_vram
 from .models.wan.sampling import WanVSRPipeline
 from .runtime.streaming import CollaborativeFrameStream, InputFrame, TilingConfig
 
@@ -324,12 +324,31 @@ class Engine:
 
             for result in stream.frames(packets):
                 if paused() and not cancelled():
-                    emit({"type": "stage", "stage": "paused"})
                     pause_started = time.perf_counter()
-                    while paused() and not cancelled():
-                        time.sleep(0.1)
+                    held = release_vram()  # other programs can use the GPU while we wait
+                    need = held_bytes(held)
+                    emit({"type": "stage", "stage": "paused", "released_gib": round(need / 1024**3, 2)})
+                    waiting = False
+                    while True:
+                        while paused() and not cancelled():
+                            time.sleep(0.1)
+                        if cancelled():
+                            self.unload()  # the weights sit in host memory: reload them for the next job
+                            break
+                        if query_memory(self.info.index)[0] >= need:
+                            try:
+                                restore_vram(held, self.info.index)
+                                break
+                            except torch.cuda.OutOfMemoryError:
+                                held += release_vram()  # give back the part we got
+                        if not waiting:
+                            waiting = True
+                            emit({"type": "stage", "stage": "vram_wait", "need_gib": round(need / 1024**3, 2)})
+                        time.sleep(1.0)
+                    del held
                     run_started += time.perf_counter() - pause_started  # keep fps / ETA honest
-                    emit({"type": "stage", "stage": "resumed"})
+                    if not cancelled():
+                        emit({"type": "stage", "stage": "resumed"})
                 if cancelled():
                     raise JobCancelled("Cancelled by user.")
                 rgb = result.rgb

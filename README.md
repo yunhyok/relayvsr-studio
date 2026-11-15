@@ -59,8 +59,9 @@ RelayVSR Studio wraps the official inference code in a Windows application and a
 
 The queue is remembered: files that are still waiting (or were being processed) when the app
 closes are listed again at the next start. Remove them from the list to forget them. **Pause**
-halts the running job at the next frame and **Resume** continues it; the models stay loaded, so
-VRAM remains in use while paused.
+halts the running job at the next frame and hands its VRAM back (weights and caches move to system
+memory; only the ~0.7 GB CUDA context stays), so other programs can use the GPU. **Resume** first
+takes the VRAM back and then continues; if it is not free yet, the job waits until it is.
 
 The app never bundles the model weights; they are downloaded from Hugging Face on demand.
 
@@ -193,7 +194,8 @@ Yao, Haoran Li and Zhibo Chen; the SDPA fallback follows LightX2V. See
 
 **대기 목록 기억**: 앱을 닫을 때 아직 대기 중이거나 처리 중이던 파일은 다음 실행 때 목록에 다시
 나타납니다. 목록에서 제거하면 기억에서도 지워집니다. **일시 정지**는 실행 중인 작업을 다음 프레임에서
-멈추고 **계속**으로 이어서 진행합니다. 정지 중에도 모델은 메모리에 남아 VRAM을 계속 사용합니다.
+멈추고 VRAM을 반납합니다(가중치와 캐시를 시스템 메모리로 옮기며, 약 0.7 GB의 CUDA 컨텍스트만 남습니다).
+**계속**을 누르면 VRAM을 먼저 다시 확보한 뒤 이어서 진행하고, 아직 비어 있지 않으면 빌 때까지 기다립니다.
 
 **스크래치 디스크**: **환경** 창의 *스크래치 디스크*에서 폴더를 지정하면 인코딩 중인 동영상,
 미리보기 이미지, 임시 파일, Triton 커널 캐시, 엔진 설치용 다운로드 캐시를 모두

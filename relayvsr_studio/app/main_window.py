@@ -762,8 +762,7 @@ class MainWindow(QMainWindow):
             return
         self.client.pause(paused)
         self.pause_button.setText(tr("Resume") if paused else tr("Pause"))
-        if paused:
-            self.progress_label.setText(f"{self.current.input.name} — {tr('Pausing…')}")
+        self.progress_label.setText(f"{self.current.input.name} — {tr('Pausing…') if paused else tr('Resuming…')}")
 
     def _reset_pause(self, enabled: bool = False) -> None:
         self.pause_button.setChecked(False)
@@ -858,6 +857,8 @@ class MainWindow(QMainWindow):
             self.progress_label.setText(f"{job.input.name} — {event.get('message', '')}")
         elif stage == "mux":
             self.progress_label.setText(f"{job.input.name} — {event.get('message', '')}")
+        elif stage == "vram_wait":
+            self.progress_label.setText(f"{job.input.name} — {tr('Waiting for free VRAM…')}")
         elif stage in ("paused", "resumed"):
             job.message = tr("Paused") if stage == "paused" else ""
             self.progress_label.setText(f"{job.input.name} — {tr('Paused') if stage == 'paused' else tr('Running')}")

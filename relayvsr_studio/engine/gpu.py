@@ -97,6 +97,58 @@ def query_memory(index: int = 0) -> tuple[int, int]:
         return int(free), int(total)
 
 
+def _relocate(tensors: list[torch.Tensor], storage) -> None:
+    for tensor in tensors:  # same offset / shape / stride, so views keep aliasing each other
+        moved = torch.empty(0, dtype=tensor.dtype, device=storage.device)
+        tensor.data = moved.set_(storage, tensor.storage_offset(), tensor.shape, tensor.stride())
+
+
+def release_vram() -> list[list[torch.Tensor]]:
+    """Move every live CUDA tensor of this process (weights, caches, intermediates) to host
+    memory in place and return them for ``restore_vram``. Only the CUDA context stays on the GPU."""
+    import gc
+    import warnings
+
+    groups: dict[int, list[torch.Tensor]] = {}
+    seen: set[int] = set()
+    stack = []
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # isinstance wakes lazy, deprecated module attributes
+        for candidate in gc.get_objects():
+            try:
+                if isinstance(candidate, torch.Tensor):
+                    stack.append(candidate)
+            except Exception:  # noqa: BLE001 - exotic objects may refuse isinstance
+                pass
+    while stack:
+        tensor = stack.pop()
+        if id(tensor) in seen or not tensor.is_cuda or tensor.layout != torch.strided:
+            continue
+        seen.add(id(tensor))
+        groups.setdefault(tensor.untyped_storage()._cdata, []).append(tensor)
+        if tensor._base is not None:  # a base without a Python reference would pin the GPU storage
+            stack.append(tensor._base)
+    held = list(groups.values())
+    for tensors in held:
+        _relocate(tensors, tensors[0].untyped_storage().cpu())
+    del groups, stack, candidate
+    gc.collect()
+    torch.cuda.empty_cache()
+    return held
+
+
+def held_bytes(held: list[list[torch.Tensor]]) -> int:
+    return sum(tensors[0].untyped_storage().nbytes() for tensors in held)
+
+
+def restore_vram(held: list[list[torch.Tensor]], index: int = 0) -> None:
+    """Undo ``release_vram``. On an out-of-memory error the unrestored groups stay in ``held``."""
+    while held:
+        tensors = held[-1]
+        _relocate(tensors, tensors[0].untyped_storage().cuda(index))
+        held.pop()
+
+
 def gpu_info(index: int = 0, probe_triton: bool = True) -> GpuInfo:
     if not torch.cuda.is_available():
         return GpuInfo(available=False)
@@ -284,4 +336,4 @@ def apply_runtime_tuning(info: GpuInfo) -> dict:
     return applied
 
 
-__all__ = ["GpuInfo", "MemoryPlan", "apply_runtime_tuning", "estimate_bytes", "gpu_info", "kv_bytes_per_token", "plan_memory", "query_memory"]
+__all__ = ["GpuInfo", "MemoryPlan", "apply_runtime_tuning", "estimate_bytes", "gpu_info", "held_bytes", "kv_bytes_per_token", "plan_memory", "query_memory", "release_vram", "restore_vram"]

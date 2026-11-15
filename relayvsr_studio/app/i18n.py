@@ -133,6 +133,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "Resume": "계속",
         "Pausing…": "일시 정지하는 중…",
         "Paused": "일시 정지됨",
+        "Resuming…": "VRAM 확보 후 재개하는 중…",
+        "Waiting for free VRAM…": "VRAM이 비기를 기다리는 중…",
         "Open": "열기",
         "Preset: RTX 50 series (Blackwell) tuned": "프리셋: RTX 50 시리즈(Blackwell) 최적화",
     },
